@@ -1,0 +1,26 @@
+# 実行ファイル
+*.out
+*.exe
+*.app
+
+# オブジェクトファイル
+*.o
+*.obj
+
+# 一時ファイル
+*.swp
+*~
+.DS_Store
+
+# VSCode設定
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ログファイル
+*.log
+
+# デバッグファイル
+*.dSYM/
