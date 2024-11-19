@@ -1,22 +1,20 @@
 CC = cc
-CLIENT = client.out
-SERVER = server.out
+CLIENT = client
+SERVER = server
 
-.PHONY: all build run clean
+.PHONY: all build server client clean
 
-build: $(CLIENT) $(SERVER)
+all: clean build
 
-$(CLIENT): client.c
-	$(CC) -o $(CLIENT) client.c
+build:
+	$(CC) -o $(CLIENT).out $(CLIENT).c
+	$(CC) -o $(SERVER).out $(SERVER).c
 
-$(SERVER): server.c
-	$(CC) -o $(SERVER) server.c
+server:
+	./$(SERVER).out
 
-run: build
-	./$(SERVER) &
-	./$(CLIENT)
-
-all: build run
+client:
+	./$(CLIENT).out
 
 clean:
-	rm -f $(CLIENT) $(SERVER)
+	rm -f $(CLIENT).out $(SERVER).out

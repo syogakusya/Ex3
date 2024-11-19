@@ -15,6 +15,7 @@ void enableRawMode()
     tcgetattr(STDIN_FILENO, &raw);
     raw.c_lflag &= ~(ECHO | ICANON);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+    // ノンブロッキングモードでサーバーからのメッセージを受信できるように
     fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 }
 
@@ -69,10 +70,19 @@ int main()
         if (bytes_read > 0)
         {
             buffer[bytes_read] = '\0';
-            printf("\033[H"); // カーソルを先頭に移動
+            // サーバーフルメッセージのチェックを追加
+            if (strstr(buffer, "Server is full") != NULL)
+            {
+                printf("\033[2J\033[H"); // 画面クリア
+                printf("%s", buffer);
+                fflush(stdout);
+                sleep(2); // メッセージを2秒間表示
+                break;    // メインループを抜ける
+            }
+            printf("\033[2J\033[H"); // 画面クリア
             printf("%s", buffer);
+            fflush(stdout);
         }
-        usleep(50000); // CPU使用率を下げるため
     }
 
     close(sock);
