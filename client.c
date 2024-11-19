@@ -3,17 +3,30 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <termios.h>
+#include <fcntl.h>
 
 #define PORT 50000
 #define BUFFER_SIZE 1024
 
-int main() {
+void enableRawMode()
+{
+    struct termios raw;
+    tcgetattr(STDIN_FILENO, &raw);
+    raw.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+    fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
+}
+
+int main()
+{
     int sock = 0;
     struct sockaddr_in serv_addr;
     char buffer[BUFFER_SIZE] = {0};
 
     // ソケット作成
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
         printf("\n ソケット作成エラー \n");
         return -1;
     }
@@ -22,43 +35,44 @@ int main() {
     serv_addr.sin_port = htons(PORT);
 
     // サーバーIPアドレスを設定
-    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
+    {
         printf("\n 無効なアドレス/アドレスはサポートされていません \n");
         return -1;
     }
 
     // サーバーに接続
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+    {
         printf("\n 接続失敗 \n");
         return -1;
     }
 
-    printf("サーバーに接続しました。コマンドを入力してください（例: attack, defend）\n");
+    enableRawMode();
+    printf("\033[2J\033[H"); // 画面クリア
 
-    while (1) {
-        char command[BUFFER_SIZE];
-        printf("コマンドを入力: ");
-        fgets(command, BUFFER_SIZE, stdin);
-        command[strcspn(command, "\n")] = '\0'; // 改行を削除
-
-        // コマンドをサーバーに送信
-        send(sock, command, strlen(command), 0);
-
-        // サーバーからの応答を受信
-        int bytes_read = read(sock, buffer, BUFFER_SIZE);
-        if (bytes_read > 0) {
-            buffer[bytes_read] = '\0'; // 受信したデータを文字列にする
-            printf("サーバーからの応答: %s\n", buffer);
+    while (1)
+    {
+        char c;
+        if (read(STDIN_FILENO, &c, 1) == 1)
+        {
+            if (c == 'q')
+                break;
+            if (strchr("wasd", c) != NULL)
+            {
+                send(sock, &c, 1, 0);
+            }
         }
 
-        // HPが0になった場合は終了
-        if (strstr(buffer, "Your health: 0") != NULL) {
-            printf("あなたは敗北しました！\n");
-            break;
-        } else if (strstr(buffer, "Enemy health: 0") != NULL) {
-            printf("あなたは勝利しました！\n");
-            break;
+        char buffer[BUFFER_SIZE];
+        int bytes_read = recv(sock, buffer, BUFFER_SIZE, MSG_DONTWAIT);
+        if (bytes_read > 0)
+        {
+            buffer[bytes_read] = '\0';
+            printf("\033[H"); // カーソルを先頭に移動
+            printf("%s", buffer);
         }
+        usleep(50000); // CPU使用率を下げるため
     }
 
     close(sock);
