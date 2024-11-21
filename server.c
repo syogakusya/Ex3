@@ -8,7 +8,7 @@
 #include <time.h>
 
 #define PORT 50000
-#define MAX_EVENTS 3
+#define MAX_EVENTS 5
 #define BUFFER_SIZE 1024
 #define MAP_WIDTH 40
 #define MAP_HEIGHT 15
@@ -51,6 +51,7 @@ typedef struct
     int used_symbols[MAX_PLAYERS];
 } GameMap;
 
+// マップの初期化
 void init_map(GameMap *map)
 {
     // グリッドの初期化
@@ -60,11 +61,11 @@ void init_map(GameMap *map)
         {
             if (y == 0 || y == MAP_HEIGHT - 1 || x == 0 || x == MAP_WIDTH - 1)
             {
-                map->grid[y][x] = '#';
+                map->grid[y][x] = '#'; // 境界線
             }
             else
             {
-                map->grid[y][x] = '.';
+                map->grid[y][x] = '.'; // 通常地形
             }
         }
     }
@@ -93,6 +94,7 @@ void init_map(GameMap *map)
     }
 }
 
+// ランダムアイテムのスポーン
 void spawn_random_item(GameMap *map)
 {
     if (map->item_count >= MAX_ITEMS)
@@ -115,6 +117,7 @@ void spawn_random_item(GameMap *map)
     map->items[map->item_count++] = item;
 }
 
+// ログの追加
 void add_log(GameMap *map, const char *format, ...)
 {
     va_list args;
@@ -131,6 +134,7 @@ void add_log(GameMap *map, const char *format, ...)
     va_end(args);
 }
 
+// ゲームマップの更新
 void update_game_map(GameMap *map, int player_id, char direction)
 {
     Player *p = &map->players[player_id];
@@ -162,6 +166,7 @@ void update_game_map(GameMap *map, int player_id, char direction)
         return;
     }
 
+    // 移動方向に応じて座標を更新
     switch (direction)
     {
     case 'w':
@@ -176,16 +181,20 @@ void update_game_map(GameMap *map, int player_id, char direction)
     case 'd':
         new_x++;
         break;
+    default:
+        // 不正な入力の場合は何もしない
+        return;
     }
 
+    // 壁にぶつかった場合は移動不可
     if (map->grid[new_y][new_x] == '#')
         return;
 
     // プレイヤーとの衝突チェック
     for (int i = 0; i < map->player_count; i++)
     {
-        // 衝突するとき
-        if (i != player_id && map->players[i].isAlive && map->players[i].x == new_x && map->players[i].y == new_y)
+        if (i != player_id && map->players[i].isAlive &&
+            map->players[i].x == new_x && map->players[i].y == new_y)
         {
             // 命中率計算
             int hit_chance = 75 + (((float)p->speed - (float)map->players[i].speed));
@@ -194,10 +203,9 @@ void update_game_map(GameMap *map, int player_id, char direction)
             if (hit_chance < 25)
                 hit_chance = 25;
 
-            // 乱数で命中判定
+            // 攻撃判定
             if ((rand() % 100) < hit_chance)
             {
-                // 攻撃処理
                 int damage = p->attack - map->players[i].defense;
                 if (damage < 0)
                     damage = 1;
@@ -217,6 +225,7 @@ void update_game_map(GameMap *map, int player_id, char direction)
                 hit_chance = 100;
             if (hit_chance < 25)
                 hit_chance = 25;
+
             if ((rand() % 100) < hit_chance)
             {
                 int counter_damage = map->players[i].attack - p->defense;
@@ -232,13 +241,11 @@ void update_game_map(GameMap *map, int player_id, char direction)
                         map->players[i].symbol, p->symbol, hit_chance);
             }
 
-            // 自分のhealthが0以下になったら死亡
+            // 死亡判定
             if (p->health <= 0)
             {
                 p->isAlive = 0;
             }
-
-            // 自分以外の誰かのhealthが0以下になったら死亡
             if (map->players[i].health <= 0)
             {
                 map->players[i].isAlive = 0;
@@ -279,6 +286,10 @@ void update_game_map(GameMap *map, int player_id, char direction)
                 p->defense += map->items[i].value;
                 add_log(map, "Player %c got DEF+%d!", p->symbol, map->items[i].value);
                 break;
+            default:
+                // 不正なアイテムタイプ
+                add_log(map, "Player %c encountered an unknown item type!", p->symbol);
+                break;
             }
             // アイテムを削除
             for (int j = i; j < map->item_count - 1; j++)
@@ -290,27 +301,16 @@ void update_game_map(GameMap *map, int player_id, char direction)
         }
     }
 
+    // プレイヤーの位置を更新
     p->x = new_x;
     p->y = new_y;
 }
 
+// 送信用文字列の作成
 void create_send_string(GameMap *map, char *buffer, int viewer_id)
 {
     char temp_grid[MAP_HEIGHT][MAP_WIDTH];
     memcpy(temp_grid, map->grid, sizeof(temp_grid));
-
-    // プレイヤーのHP状態に応じてエスケープシークエンスで画面色を変更
-    Player *viewer = &map->players[viewer_id];
-    char screen_color[10] = "\033[0m";
-    if (viewer->health <= 0)
-        strcpy(screen_color, "\033[31m"); // 赤（ゲームオーバー）
-    else if (viewer->health <= INITIAL_HP * 0.2)
-        strcpy(screen_color, "\033[31m"); // 赤
-    else if (viewer->health <= INITIAL_HP * 0.4)
-        strcpy(screen_color, "\033[33m"); // 黄
-
-    int pos = 0;
-    pos += sprintf(&buffer[pos], "%s", screen_color);
 
     // アイテムを配置
     for (int i = 0; i < map->item_count; i++)
@@ -328,6 +328,19 @@ void create_send_string(GameMap *map, char *buffer, int viewer_id)
         }
     }
 
+    // プレイヤーのHPに応じて色を変更
+    Player *viewer = &map->players[viewer_id];
+    char screen_color[10] = "\033[0m";
+    if (viewer->health <= 0)
+        strcpy(screen_color, "\033[31m"); // 赤（ゲームオーバー）
+    else if (viewer->health <= INITIAL_HP * 0.2)
+        strcpy(screen_color, "\033[31m"); // 赤
+    else if (viewer->health <= INITIAL_HP * 0.4)
+        strcpy(screen_color, "\033[33m"); // 黄
+
+    int pos = 0;
+    pos += sprintf(&buffer[pos], "%s", screen_color);
+
     // マップの描画
     for (int y = 0; y < MAP_HEIGHT; y++)
     {
@@ -338,7 +351,7 @@ void create_send_string(GameMap *map, char *buffer, int viewer_id)
         buffer[pos++] = '\n';
     }
 
-    // 自分のステータスのみ表示
+    // 視聴者のステータス表示
     Player *p = &map->players[viewer_id];
     char hp_color[10];
     if (p->health <= 0)
@@ -390,19 +403,19 @@ int main()
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
         perror("socket failed");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     // ソケットオプション設定
     int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)))
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     {
         perror("setsockopt failed");
         close(server_fd);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
-    // アドレス作成
+    // アドレス設定
     memset(&address, 0, sizeof(struct sockaddr_in));
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -413,29 +426,33 @@ int main()
     {
         perror("bind failed");
         close(server_fd);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
-    // リッスン
+    // リッスン開始
     if (listen(server_fd, 5) < 0)
     {
         perror("listen failed");
         close(server_fd);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     // epoll作成
     if ((epoll_fd = epoll_create1(0)) == -1)
     {
         perror("epoll_create1 failed");
+        close(server_fd);
         exit(EXIT_FAILURE);
     }
 
+    // サーバーソケットをepollに追加
     event.events = EPOLLIN;
     event.data.fd = server_fd;
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) == -1)
     {
         perror("epoll_ctl failed");
+        close(server_fd);
+        close(epoll_fd);
         exit(EXIT_FAILURE);
     }
 
@@ -456,10 +473,10 @@ int main()
             exit(EXIT_FAILURE);
         }
 
-        // サーバーに来たイベントを処理
+        // 発生したイベントを処理
         for (int i = 0; i < num_fds; i++)
         {
-            // サーバーに接続した場合
+            // 新しい接続が来た場合
             if (events[i].data.fd == server_fd)
             {
                 socklen_t addrlen = sizeof(struct sockaddr_in);
@@ -471,11 +488,11 @@ int main()
 
                 // プレイヤー情報を初期化
                 int p_num = -1;
-                for (int i = 0; i < MAX_PLAYERS; i++)
+                for (int j = 0; j < MAX_PLAYERS; j++)
                 {
-                    if (!game_map.players[i].isAlive) // used_symbolsではなく、isAliveで判定
+                    if (!game_map.players[j].isAlive)
                     {
-                        p_num = i;
+                        p_num = j;
                         break;
                     }
                 }
@@ -514,35 +531,42 @@ int main()
                     game_map.player_count = p_num + 1;
                 }
 
-                // まず新規プレイヤーにマップを送信
+                // 新規プレイヤーにマップを送信
                 char map_str[BUFFER_SIZE];
                 create_send_string(&game_map, map_str, p_num);
-                send(new_socket, map_str, strlen(map_str), 0);
+                if (send(new_socket, map_str, strlen(map_str), 0) == -1)
+                {
+                    perror("send failed");
+                }
 
-                // 次に他のプレイヤーに更新されたマップを送信
+                // 他のプレイヤーに更新されたマップを送信
                 for (int j = 0; j < game_map.player_count; j++)
                 {
                     if (j != p_num && game_map.players[j].isAlive)
                     {
                         create_send_string(&game_map, map_str, j);
-                        send(game_map.players[j].socket, map_str, strlen(map_str), 0);
+                        if (send(game_map.players[j].socket, map_str, strlen(map_str), 0) == -1)
+                        {
+                            perror("send failed");
+                        }
                     }
                 }
 
+                // 新しいクライアントソケットをepollに追加
                 event.events = EPOLLIN;
                 event.data.fd = new_socket;
                 if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, new_socket, &event) == -1)
                 {
                     perror("epoll_ctl failed");
-                    exit(EXIT_FAILURE);
+                    close(new_socket);
+                    continue;
                 }
 
                 connected_players++;
             }
-            // クライアントからデータを受信した場合
+            // クライアントからのデータ受信
             else
             {
-                // クライアントからデータを受信
                 int client_socket = events[i].data.fd;
                 int bytes_read = read(client_socket, buffer, BUFFER_SIZE);
                 if (bytes_read <= 0)
@@ -556,7 +580,10 @@ int main()
                         {
                             // シンボルを解放
                             int symbol_index = game_map.players[j].symbol - '1';
-                            game_map.used_symbols[symbol_index] = 0;
+                            if (symbol_index >= 0 && symbol_index < MAX_PLAYERS)
+                            {
+                                game_map.used_symbols[symbol_index] = 0;
+                            }
 
                             // プレイヤー情報をリセット
                             game_map.players[j].isAlive = 0;
@@ -581,14 +608,20 @@ int main()
                     }
 
                     close(client_socket);
-                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, NULL);
+                    if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, NULL) == -1)
+                    {
+                        perror("epoll_ctl DEL failed");
+                    }
 
                     // 残りのプレイヤーに更新されたマップを送信
                     char map_str[BUFFER_SIZE];
                     for (int j = 0; j < game_map.player_count; j++)
                     {
                         create_send_string(&game_map, map_str, j);
-                        send(game_map.players[j].socket, map_str, strlen(map_str), 0);
+                        if (send(game_map.players[j].socket, map_str, strlen(map_str), 0) == -1)
+                        {
+                            perror("send failed");
+                        }
                     }
                     continue;
                 }
@@ -615,13 +648,16 @@ int main()
                     for (int j = 0; j < game_map.player_count; j++)
                     {
                         create_send_string(&game_map, map_str, j);
-                        send(game_map.players[j].socket, map_str, strlen(map_str), 0);
+                        if (send(game_map.players[j].socket, map_str, strlen(map_str), 0) == -1)
+                        {
+                            perror("send failed");
+                        }
                     }
                 }
             }
         }
 
-        // ITEM_SPAWN_INTERVAL秒ごとにアイテムを生成
+        // アイテムの定期的なスポーン
         time_t current_time = time(NULL);
         if (current_time - last_item_spawn >= ITEM_SPAWN_INTERVAL)
         {
@@ -632,8 +668,14 @@ int main()
             char map_str[BUFFER_SIZE];
             for (int i = 0; i < game_map.player_count; i++)
             {
-                create_send_string(&game_map, map_str, i);
-                send(game_map.players[i].socket, map_str, strlen(map_str), 0);
+                if (game_map.players[i].isAlive)
+                {
+                    create_send_string(&game_map, map_str, i);
+                    if (send(game_map.players[i].socket, map_str, strlen(map_str), 0) == -1)
+                    {
+                        perror("send failed");
+                    }
+                }
             }
         }
     }
