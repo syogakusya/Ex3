@@ -6,7 +6,6 @@
 #include <sys/epoll.h>
 #include <stdarg.h>
 #include <time.h>
-#include <sys/timerfd.h>
 
 #define PORT 50000
 #define MAX_EVENTS 3
@@ -114,7 +113,6 @@ void spawn_random_item(GameMap *map)
 
     // items[0]に一個目のアイテムが入るので、インクリメントはこれでよい
     map->items[map->item_count++] = item;
-    
 }
 
 void add_log(GameMap *map, const char *format, ...)
@@ -139,14 +137,14 @@ void update_game_map(GameMap *map, int player_id, char direction)
     int new_x = p->x;
     int new_y = p->y;
 
-
     // HPが0以下の場合は移動不可
     if (p->health <= 0)
     {
         if (p->isAlive)
             p->isAlive = 0;
-        
-        if(direction){
+
+        if (direction)
+        {
             p->health = INITIAL_HP;
             int x, y;
             do
@@ -179,8 +177,6 @@ void update_game_map(GameMap *map, int player_id, char direction)
         new_x++;
         break;
     }
-
-    
 
     if (map->grid[new_y][new_x] == '#')
         return;
@@ -237,12 +233,14 @@ void update_game_map(GameMap *map, int player_id, char direction)
             }
 
             // 自分のhealthが0以下になったら死亡
-            if(p->health <= 0){
+            if (p->health <= 0)
+            {
                 p->isAlive = 0;
             }
 
-            //自分以外の誰かのhealthが0以下になったら死亡
-            if(map->players[i].health <= 0){
+            // 自分以外の誰かのhealthが0以下になったら死亡
+            if (map->players[i].health <= 0)
+            {
                 map->players[i].isAlive = 0;
             }
             return;
@@ -323,8 +321,9 @@ void create_send_string(GameMap *map, char *buffer, int viewer_id)
     // プレイヤーを配置
     for (int i = 0; i < map->player_count; i++)
     {
-        if(map->players[i].isAlive){
-             Player *p = &map->players[i];
+        if (map->players[i].isAlive)
+        {
+            Player *p = &map->players[i];
             temp_grid[p->y][p->x] = p->symbol;
         }
     }
