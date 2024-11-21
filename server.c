@@ -313,7 +313,7 @@ void create_send_string(GameMap *map, char *buffer, int viewer_id)
     char hp_color[10];
     if (p->health <= 0)
     {
-        pos += sprintf(&buffer[pos], "\nGAME OVER! Press any key to restart\n");
+        pos += sprintf(&buffer[pos], "\nGAME OVER! Press Q key to quit\n");
     }
     else
     {

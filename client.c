@@ -36,7 +36,7 @@ int main()
     serv_addr.sin_port = htons(PORT);
 
     // サーバーIPアドレスを設定
-    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
+    if (inet_pton(AF_INET, "172.28.34.67", &serv_addr.sin_addr) <= 0)
     {
         printf("\n 無効なアドレス/アドレスはサポートされていません \n");
         return -1;
@@ -85,6 +85,7 @@ int main()
         }
     }
 
+    printf("\033[0m");
     close(sock);
     return 0;
 }
