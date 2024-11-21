@@ -6,15 +6,16 @@
 #include <sys/epoll.h>
 #include <stdarg.h>
 #include <time.h>
+#include <sys/timerfd.h>
 
 #define PORT 50000
 #define MAX_EVENTS 3
 #define BUFFER_SIZE 1024
-#define MAP_WIDTH 25
+#define MAP_WIDTH 40
 #define MAP_HEIGHT 15
 #define MAX_PLAYERS 4
-#define MAX_ITEMS 5
-#define ITEM_SPAWN_INTERVAL 15
+#define MAX_ITEMS 10
+#define ITEM_SPAWN_INTERVAL 5
 #define MAX_LOG_LINES 5
 #define INITIAL_HP 100
 
@@ -113,6 +114,7 @@ void spawn_random_item(GameMap *map)
 
     // items[0]に一個目のアイテムが入るので、インクリメントはこれでよい
     map->items[map->item_count++] = item;
+    
 }
 
 void add_log(GameMap *map, const char *format, ...)
@@ -137,11 +139,28 @@ void update_game_map(GameMap *map, int player_id, char direction)
     int new_x = p->x;
     int new_y = p->y;
 
+
     // HPが0以下の場合は移動不可
     if (p->health <= 0)
     {
-        if (!p->isAlive)
+        if (p->isAlive)
             p->isAlive = 0;
+        
+        if(direction){
+            p->health = INITIAL_HP;
+            int x, y;
+            do
+            {
+                x = rand() % (MAP_WIDTH - 2) + 1;
+                y = rand() % (MAP_HEIGHT - 2) + 1;
+            } while (map->grid[y][x] != '.');
+            p->x = x;
+            p->y = y;
+            p->isAlive = 1;
+            p->attack = 10;
+            p->defense = 5;
+            p->speed = 5;
+        }
         return;
     }
 
@@ -161,6 +180,8 @@ void update_game_map(GameMap *map, int player_id, char direction)
         break;
     }
 
+    
+
     if (map->grid[new_y][new_x] == '#')
         return;
 
@@ -168,7 +189,7 @@ void update_game_map(GameMap *map, int player_id, char direction)
     for (int i = 0; i < map->player_count; i++)
     {
         // 衝突するとき
-        if (i != player_id && map->players[i].x == new_x && map->players[i].y == new_y)
+        if (i != player_id && map->players[i].isAlive && map->players[i].x == new_x && map->players[i].y == new_y)
         {
             // 命中率計算
             int hit_chance = 75 + (((float)p->speed - (float)map->players[i].speed));
@@ -214,6 +235,16 @@ void update_game_map(GameMap *map, int player_id, char direction)
                 add_log(map, "Player %c missed counter-attack on Player %c! (Hit: %d%%)",
                         map->players[i].symbol, p->symbol, hit_chance);
             }
+
+            // 自分のhealthが0以下になったら死亡
+            if(p->health <= 0){
+                p->isAlive = 0;
+            }
+
+            //自分以外の誰かのhealthが0以下になったら死亡
+            if(map->players[i].health <= 0){
+                map->players[i].isAlive = 0;
+            }
             return;
         }
     }
@@ -257,7 +288,6 @@ void update_game_map(GameMap *map, int player_id, char direction)
                 map->items[j] = map->items[j + 1];
             }
             map->item_count--;
-            spawn_random_item(map);
             break;
         }
     }
@@ -293,9 +323,10 @@ void create_send_string(GameMap *map, char *buffer, int viewer_id)
     // プレイヤーを配置
     for (int i = 0; i < map->player_count; i++)
     {
-        Player *p = &map->players[i];
-        if (p->isAlive)
+        if(map->players[i].isAlive){
+             Player *p = &map->players[i];
             temp_grid[p->y][p->x] = p->symbol;
+        }
     }
 
     // マップの描画
@@ -313,7 +344,7 @@ void create_send_string(GameMap *map, char *buffer, int viewer_id)
     char hp_color[10];
     if (p->health <= 0)
     {
-        pos += sprintf(&buffer[pos], "\nGAME OVER! Press Q key to quit\n");
+        pos += sprintf(&buffer[pos], "\nGAME OVER! Press ANY Key to Restart\n");
     }
     else
     {
@@ -597,6 +628,14 @@ int main()
         {
             spawn_random_item(&game_map);
             last_item_spawn = current_time;
+
+            // 全プレイヤーに更新されたマップを送信
+            char map_str[BUFFER_SIZE];
+            for (int i = 0; i < game_map.player_count; i++)
+            {
+                create_send_string(&game_map, map_str, i);
+                send(game_map.players[i].socket, map_str, strlen(map_str), 0);
+            }
         }
     }
 
